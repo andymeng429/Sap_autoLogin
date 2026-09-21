@@ -1,0 +1,15 @@
+# SAP GUI 自动登录依赖
+# 安装：pip install -r requirements.txt
+# （国内可用镜像：-i https://pypi.tuna.tsinghua.edu.cn/simple）
+
+# 图形界面。只装 Essentials 就够 QtCore/QtGui/QtWidgets，比全量 PySide6 小很多
+PySide6-Essentials>=6.6
+
+# SAP COM 自动化 + DPAPI 密码加密
+pywin32>=306
+
+# 读取旧版 .env（用于一次性迁移到 config.json）
+python-dotenv>=1.0.0
+
+# 打包成 exe 时使用
+pyinstaller>=6.0
