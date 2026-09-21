@@ -11,9 +11,11 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -973,6 +975,31 @@ class MainWindow(QWidget):
         self.save_config()
         self.reload()
 
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt 命名约定
+        """关窗口时如果还有登录在跑，问一句再走。
+
+        直接放行的话 QThread 会在窗口销毁时被硬掐，轻则报
+        "QThread: Destroyed while thread is still running"，重则让退出
+        过程半途而废，PyInstaller 的临时目录也清不干净。
+        """
+        thread = self.login_thread
+        if thread is not None and thread.isRunning():
+            answer = QMessageBox.question(
+                self,
+                "还在登录",
+                "还有连接正在登录，现在退出要等它结束（最多约一分钟）。\n确定要退出吗？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                event.ignore()
+                return
+            self.setCursor(Qt.BusyCursor)
+            thread.wait()          # 登录各步都有超时，最坏几十秒会自己结束
+            self.login_thread = None
+            self.unsetCursor()
+        event.accept()
+
     def on_options(self) -> None:
         dialog = OptionsDialog(self.config.options, parent=self)
         if dialog.exec() != QDialog.Accepted:
@@ -1088,4 +1115,24 @@ def run_gui(store: Optional[ConfigStore] = None) -> int:
         geometry.moveCenter(screen.availableGeometry().center())
         window.move(geometry.topLeft())
 
-    return app.exec()
+    # 打包成 windowed exe 后没有控制台，界面"一闪而过"只能靠日志留痕，
+    # 所以这里把起止都记一条，出问题时有据可查。
+    LOGGER.info("界面已显示（%d 条连接），进入事件循环", len(window.cards))
+    started = time.monotonic()
+    return_code = app.exec()
+    elapsed = time.monotonic() - started
+
+    # 事件循环结束后把 Qt 侧的资源放干净：窗口、样式、残余的对象引用。
+    window.deleteLater()
+    app.processEvents()
+    del window
+    gc.collect()
+
+    LOGGER.info("事件循环结束：返回码 %s，运行 %.1f 秒", return_code, elapsed)
+    if elapsed < 1.0:
+        LOGGER.warning(
+            "界面在 %.2f 秒内就退出了。若不是你主动关闭，"
+            "请把这份日志发给维护者。",
+            elapsed,
+        )
+    return return_code

@@ -59,6 +59,11 @@ echo --- tests\test_card_state.py ---
 if errorlevel 1 set FAILED=1
 
 echo.
+echo --- tests\test_exit_cleanup.py ---
+".venv\Scripts\python.exe" "tests\test_exit_cleanup.py"
+if errorlevel 1 set FAILED=1
+
+echo.
 if "%FAILED%"=="1" (
     echo [RESULT] FAILED - see details above
 ) else (

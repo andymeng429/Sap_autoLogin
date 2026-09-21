@@ -27,8 +27,13 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import shutil
 import sys
+import tempfile
+import threading
+import time
 from dataclasses import replace
+from pathlib import Path
 from typing import Optional
 
 from config_store import ConfigError, ConfigStore
@@ -234,6 +239,41 @@ def _wait_for_enter() -> None:
 # --------------------------------------------------------------------------- #
 # 入口
 # --------------------------------------------------------------------------- #
+def cleanup_stale_mei(temp_dir: Optional[str] = None) -> list[str]:
+    """清扫 %TEMP% 里残留的 PyInstaller 解压目录（_MEIxxxx）。
+
+    现在打包走的是**文件夹模式（onedir）**，程序自己不再产生这种临时目录，
+    这个函数降级为兜底：清掉本机以前用单文件版时留下的垃圾，以及其它
+    单文件 exe 没删干净的同名目录。规则：
+
+    * 只动 `_MEI*` 命名模式，删不掉的（别的程序正用着）跳过；
+    * 两分钟内的新目录不碰，避免和刚启动的其它实例抢。
+
+    返回实际删除的目录列表（仅用于测试和日志）。
+    """
+    if sys.platform != "win32":
+        return []
+    temp = Path(temp_dir) if temp_dir else Path(tempfile.gettempdir())
+    removed: list[str] = []
+    now = time.time()
+    for path in sorted(temp.glob("_MEI*")):
+        try:
+            if not path.is_dir() or now - path.stat().st_mtime < 120:
+                continue
+            shutil.rmtree(path, ignore_errors=False)
+        except OSError:
+            continue        # 还被占用或权限不够：不是我们的菜，留着
+        removed.append(str(path))
+    return removed
+
+
+def _cleanup_stale_mei_async() -> None:
+    """后台清扫，不拖慢启动。"""
+    threading.Thread(
+        target=cleanup_stale_mei, daemon=True, name="mei-sweep"
+    ).start()
+
+
 def _gui_parser() -> argparse.ArgumentParser:
     """界面模式只认这几个参数，其余一律忽略，避免误报"参数错误"。"""
     parser = argparse.ArgumentParser(add_help=False)
@@ -267,6 +307,7 @@ def run_gui_entry(raw_args: list[str]) -> int:
 
 def main(argv: Optional[list[str]] = None) -> int:
     _ensure_std_streams()
+    _cleanup_stale_mei_async()
     raw_args = list(sys.argv[1:] if argv is None else argv)
 
     if not raw_args or "--gui" in raw_args:
@@ -302,4 +343,6 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _return_code = main()
+    logging.shutdown()          # 先把日志刷干净，再交给引导器收尾
+    sys.exit(_return_code)
