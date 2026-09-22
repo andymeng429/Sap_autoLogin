@@ -1,12 +1,17 @@
 # OpenSAPGUI · SAP GUI 自动登录
 
+**⬇️ [下载最新版（免安装）](https://github.com/andymeng429/Sap_autoLogin/releases/latest)** —— 解压即用，不需要 Python。
+前提：本机装有 SAP GUI for Windows，且账号具备 `SAP GUI Scripting` 权限（服务端管控，详见[环境要求](#环境要求)）。
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey.svg)](#环境要求)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](requirements.txt)
-[![Tests](https://img.shields.io/badge/tests-148%20passed-brightgreen.svg)](#测试)
+[![tests](https://github.com/andymeng429/Sap_autoLogin/actions/workflows/tests.yml/badge.svg)](https://github.com/andymeng429/Sap_autoLogin/actions/workflows/tests.yml)
 
 一键登录 SAP，可选直接进入指定事务码。图形界面里单击卡片即可登录，也支持命令行调用（给快捷方式 / 计划任务用）。
 连接配置全部保存在本地，**密码用 Windows DPAPI 加密，仓库里没有任何明文凭据**。
+
+![主界面：连接卡片列表，单击即登录](docs/images/main-window.png)
 
 - 图形界面：连接卡片列表，单击即登录；按名称排序、可置顶、带开发/测试/生产环境徽章
 - 连接名 / client / 事务码下拉：自动读取本机 SAP Logon 的景观文件，不用手敲
@@ -54,7 +59,7 @@ pyinstaller>=6.0          # 打包 exe 时使用
 
 ### 方式一：直接用打包好的程序（推荐）
 
-1. 解压整个 `OpenSAPGUI` 文件夹（**不要只把 exe 单独拷出来**，它需要同级的 `_internal\` 目录）；
+1. 到 [Releases](https://github.com/andymeng429/Sap_autoLogin/releases/latest) 下载最新压缩包，解压整个 `OpenSAPGUI` 文件夹（**不要只把 exe 单独拷出来**，它需要同级的 `_internal\` 目录）；
 2. 双击 `OpenSAPGUI.exe`；
 3. 界面右上角「＋ 新建连接」，填连接名、client、用户名、密码（连接名和 client 有下拉可选）；
 4. 之后**单击卡片**就能直接登录。
@@ -92,6 +97,8 @@ python -m venv .venv
 
 **编辑连接**里的字段：
 
+![编辑连接对话框](docs/images/entry-dialog.png)
+
 | 字段 | 说明 |
 |---|---|
 | 显示名称（可选）| 卡片标题。留空则显示「连接名 / client」 |
@@ -101,6 +108,8 @@ python -m venv .venv
 | 用户名 / 密码 | 密码存盘时自动加密 |
 
 **环境徽章**：SAP 本身不提供「这套系统是开发还是生产」的信息，所以按你的命名约定判——在「全局设置 → 环境判定规则」里配，每行一条「关键词=环境」，先命中先用：
+
+![全局设置对话框](docs/images/options-dialog.png)
 
 ```
 *D=开发          连接名以 D 结尾
