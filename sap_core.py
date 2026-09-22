@@ -3,8 +3,7 @@
 这个模块**不依赖任何 GUI 库**，命令行模式和图形界面共用同一套登录流程，
 保证两边行为一致（也方便单独写 mock 测试）。
 
-配置来源是 `config_store.AppConfig`（config.json），旧 .env 由 config_store
-负责一次性迁移。
+配置来源是 `config_store.AppConfig`（config.json）。
 """
 
 from __future__ import annotations
@@ -247,9 +246,9 @@ def resolve_target(settings: Settings, keyword: Optional[str] = None) -> LoginTa
     匹配顺序（越靠前优先级越高）：
 
     1. 条目 client 完全相等；
-    2. 条目连接名完全相等（`--connection BH-3P` 或直接敲连接名）；
+    2. 条目连接名完全相等（`--connection PRD-1` 或直接敲连接名）；
     3. 条目备注完全相等；
-    4. `client_rules` 前缀规则（从旧 .env 的 SAP_CLIENT_MAP 迁移而来），
+    4. `client_rules` 前缀规则（client 号以某几位开头 -> 连接名），
        此时 client 用用户输入的完整值；
     5. 条目 client 前缀匹配；
     6. 没给关键字 -> 第一条可用条目。

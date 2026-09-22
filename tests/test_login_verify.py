@@ -163,8 +163,8 @@ def test_login_happy_path():
     """完整登录：表单值写对、登录页消失 -> 判定成功，且不白等。"""
     session = LoginFlowSession()
     started = time.time()
-    m.SAPSession(session, popup_timeout=30).login("120", "BH_002", "secret")
-    assert session.filled == {"client": "120", "user": "BH_002", "password": "secret"}
+    m.SAPSession(session, popup_timeout=30).login("120", "DEMO_USER", "secret")
+    assert session.filled == {"client": "120", "user": "DEMO_USER", "password": "secret"}
     assert session.entered is True
     assert time.time() - started < 6, "正常登录耗时过长"
 
@@ -177,7 +177,7 @@ def test_login_failure_is_reported():
         popup="用户名或密码错误",
     )
     try:
-        m.SAPSession(session, popup_timeout=30).login("120", "BH_002", "wrong")
+        m.SAPSession(session, popup_timeout=30).login("120", "DEMO_USER", "wrong")
     except m.LoginError as exc:
         assert "登录未成功" in str(exc), str(exc)
         return
@@ -211,7 +211,7 @@ def test_verify_login_success():
         m.ID_COMMAND_FIELD: Element(text=""),
         "wnd[0]": Element(sendVKey=lambda key: None),
     })
-    m.SAPSession(session, popup_timeout=1).verify_login("120", "BH_002")
+    m.SAPSession(session, popup_timeout=1).verify_login("120", "DEMO_USER")
 
 
 def test_verify_login_wrong_password():
@@ -221,7 +221,7 @@ def test_verify_login_wrong_password():
         "wnd[1]": Element(Text="用户或密码不正确"),
     }))
     try:
-        m.SAPSession(session, popup_timeout=1).verify_login("120", "BH_002")
+        m.SAPSession(session, popup_timeout=1).verify_login("120", "DEMO_USER")
     except m.LoginError as exc:
         assert "密码" in str(exc), str(exc)
         return
@@ -235,7 +235,7 @@ def test_verify_login_stuck_on_login_screen():
     try:
         session = FakeSession(login_screen_elements())
         try:
-            m.SAPSession(session, popup_timeout=1).verify_login("120", "BH_002")
+            m.SAPSession(session, popup_timeout=1).verify_login("120", "DEMO_USER")
         except m.LoginError as exc:
             assert "仍停留在登录界面" in str(exc), str(exc)
             return
@@ -253,7 +253,7 @@ def test_verify_login_forced_password_change():
         "wnd[0]": Element(sendVKey=lambda key: None),
     })
     try:
-        m.SAPSession(session, popup_timeout=1).verify_login("120", "BH_002")
+        m.SAPSession(session, popup_timeout=1).verify_login("120", "DEMO_USER")
     except m.LoginError as exc:
         assert "修改密码" in str(exc), str(exc)
         return
@@ -263,7 +263,7 @@ def test_verify_login_forced_password_change():
 def test_no_verify_skips_checks():
     """--no-verify：跳过校验，不下任何结论。"""
     session = FakeSession(login_screen_elements())
-    m.SAPSession(session, popup_timeout=1, verify=False).verify_login("120", "BH_002")
+    m.SAPSession(session, popup_timeout=1, verify=False).verify_login("120", "DEMO_USER")
 
 
 def test_enter_transaction_reports_error():
@@ -336,13 +336,13 @@ def test_perform_login_tcode_precedence():
 
     def make_settings(tcode=""):
         entry = m.ConnectionEntry(
-            connection="BH-1D", client="120", user="U",
+            connection="DEV-1", client="120", user="U",
             password="P", tcode=tcode,
         )
         return m.Settings.from_config(m.AppConfig(entries=[entry]))
 
     def make_target(tcode=""):
-        return m.LoginTarget(label="L", connection="BH-1D", client="120",
+        return m.LoginTarget(label="L", connection="DEV-1", client="120",
                              user="U", password="P", tcode=tcode)
 
     original = m.SAPLauncher

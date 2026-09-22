@@ -5,12 +5,11 @@
     OpenSAPGUI.exe                      # 不带参数 -> 打开图形界面，单击卡片即登录
     OpenSAPGUI.exe --gui                # 同上，显式指定
     OpenSAPGUI.exe 120 BP               # 命令行：登录 client 120 的条目并进入 BP
-    OpenSAPGUI.exe 800 MM03             # 命令行：client 以 8 开头 -> 按映射规则走 BH-3P
-    OpenSAPGUI.exe --connection BH-3P   # 命令行：直接点名连接
+    OpenSAPGUI.exe 100 MM03             # 命令行：client 以 1 开头 -> 按映射规则走 PRD-1
+    OpenSAPGUI.exe --connection PRD-1   # 命令行：直接点名连接
     OpenSAPGUI.exe --list               # 列出现有连接配置
 
 配置存放在程序同级的 ``config.json``，密码用 Windows DPAPI 加密，**不含明文**。
-首次运行若检测到旧的 ``.env``，会自动迁移成 config.json 并把 .env 改名留档。
 
 界面模式下自带的控制台窗口会自动隐藏 —— 仅当该控制台属于本进程，
 所以从 CMD 里手动运行不会把你的终端窗口一起藏掉。
@@ -196,7 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="示例:\n"
                "  OpenSAPGUI.exe                 打开图形界面\n"
                "  OpenSAPGUI.exe 120 BP          登录 client 120 并进入 BP\n"
-               "  OpenSAPGUI.exe 800 MM03        client 以 8 开头 -> BH-3P\n"
+               "  OpenSAPGUI.exe 100 MM03        client 以 1 开头 -> PRD-1\n"
                "  OpenSAPGUI.exe --list          列出已配置的连接\n",
     )
     parser.add_argument("target", nargs="?",

@@ -8,8 +8,5 @@ PySide6-Essentials>=6.6
 # SAP COM 自动化 + DPAPI 密码加密
 pywin32>=306
 
-# 读取旧版 .env（用于一次性迁移到 config.json）
-python-dotenv>=1.0.0
-
 # 打包成 exe 时使用
 pyinstaller>=6.0

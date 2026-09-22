@@ -28,9 +28,9 @@ from config_store import AppConfig, AppOptions, ConfigStore, ConnectionEntry
 APP = QApplication.instance() or QApplication([])
 
 COMPLETE = ConnectionEntry(
-    connection="BH-1D", client="120", user="ANDY", password="secret", tcode="SE09"
+    connection="DEV-1", client="120", user="DEMO_USER", password="secret", tcode="SE09"
 )
-INCOMPLETE = ConnectionEntry(connection="BH-3P", user="ANDY", password="secret")
+INCOMPLETE = ConnectionEntry(connection="PRD-1", user="DEMO_USER", password="secret")
 
 
 def make_card(entry=COMPLETE):
@@ -129,12 +129,12 @@ def test_finish_clears_cards_and_status_text():
     card.set_busy(True)
     window.cards.append(card)
 
-    window._on_login_finished(True, "登录成功", "BH-1D / 120")
+    window._on_login_finished(True, "登录成功", "DEV-1 / 120")
     try:
         assert row_visible(card) is False
         assert card._busy is False
         assert card.edit_button.isEnabled() is True, "结束后按钮要恢复"
-        assert window.status_label.text() == "BH-1D / 120"
+        assert window.status_label.text() == "DEV-1 / 120"
         assert "已登录" not in window.status_label.text(), "状态栏也不要再挂「已登录」"
     finally:
         teardown(window, folder)
@@ -210,7 +210,7 @@ def test_after_login_behind_calls_the_helper():
     original = gui_app.send_main_window_behind_sap
     gui_app.send_main_window_behind_sap = lambda hwnd: calls.append(hwnd) or True
     try:
-        window.status_label.setText("BH-1D / 120")
+        window.status_label.setText("DEV-1 / 120")
         expected_hwnd = int(window.winId())
         window._after_login_action()
 
@@ -227,9 +227,9 @@ def test_after_login_behind_says_nothing_when_not_found():
     original = gui_app.send_main_window_behind_sap
     gui_app.send_main_window_behind_sap = lambda hwnd: False
     try:
-        window.status_label.setText("BH-1D / 120")
+        window.status_label.setText("DEV-1 / 120")
         window._after_login_action()
-        assert window.status_label.text() == "BH-1D / 120", "没做成就不吹牛"
+        assert window.status_label.text() == "DEV-1 / 120", "没做成就不吹牛"
     finally:
         gui_app.send_main_window_behind_sap = original
         teardown(window, folder)

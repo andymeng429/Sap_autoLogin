@@ -26,15 +26,15 @@ from sap_landscape import SapService
 APP = QApplication.instance() or QApplication([])
 
 SYSTEMS_ONLY = [
-    SapService(name="BH-1D", kind="system"),
-    SapService(name="BH-2Q", kind="system"),
-    SapService(name="BH-3P", kind="system"),
+    SapService(name="DEV-1", kind="system"),
+    SapService(name="QAS-1", kind="system"),
+    SapService(name="PRD-1", kind="system"),
 ]
 
 WITH_SHORTCUTS = SYSTEMS_ONLY + [
-    SapService(name="BH120-PO", client="120", kind="shortcut", description="BH-1D", cmd="PO"),
-    SapService(name="BH110-SE09", client="110", kind="shortcut", description="BH-1D", cmd="SE09"),
-    SapService(name="BH800-PO", client="800", kind="shortcut", description="BH-3P"),
+    SapService(name="SYS120-PO", client="120", kind="shortcut", description="DEV-1", cmd="PO"),
+    SapService(name="SYS110-SE09", client="110", kind="shortcut", description="DEV-1", cmd="SE09"),
+    SapService(name="SYS300-PO", client="300", kind="shortcut", description="PRD-1"),
 ]
 
 
@@ -57,27 +57,27 @@ def make_dialog(entry=None, options=None, services=None):
 # --------------------------------------------------------------------------- #
 def test_connection_dropdown_lists_connections():
     dialog = make_dialog(services=SYSTEMS_ONLY)
-    assert combo_items(dialog.connection_edit) == ["BH-1D", "BH-2Q", "BH-3P"]
+    assert combo_items(dialog.connection_edit) == ["DEV-1", "PRD-1", "QAS-1"]
 
 
 def test_client_dropdown_uses_landscape_shortcuts():
-    dialog = make_dialog(ConnectionEntry(connection="BH-1D", client="120"))
+    dialog = make_dialog(ConnectionEntry(connection="DEV-1", client="120"))
     assert combo_items(dialog.client_edit) == ["110", "120"]
     assert dialog.client_edit.currentText() == "120", "编辑已有条目要保留原值"
 
 
 def test_client_dropdown_falls_back_to_default_clients():
     """目标电脑上没建快捷方式 -> 用全局设置里的默认候选。"""
-    options = AppOptions(default_clients="100,110,120,610,800")
-    dialog = make_dialog(ConnectionEntry(connection="BH-1D", client="610"),
+    options = AppOptions(default_clients="100,200,300")
+    dialog = make_dialog(ConnectionEntry(connection="DEV-1", client="610"),
                          options=options, services=SYSTEMS_ONLY)
-    assert combo_items(dialog.client_edit) == ["100", "110", "120", "610", "800"]
+    assert combo_items(dialog.client_edit) == ["100", "200", "300"]
     assert dialog.client_edit.currentText() == "610"
 
 
 def test_landscape_candidates_win_over_fallback():
     options = AppOptions(default_clients="999")
-    dialog = make_dialog(ConnectionEntry(connection="BH-1D"), options=options)
+    dialog = make_dialog(ConnectionEntry(connection="DEV-1"), options=options)
     assert combo_items(dialog.client_edit) == ["110", "120"], "本机有候选时不掺兜底值"
 
 
@@ -104,24 +104,24 @@ def test_landscape_file_setting_is_passed_through():
 # 切换连接名时的联动
 # --------------------------------------------------------------------------- #
 def test_changing_connection_clears_client():
-    """BH-1D/120 改成 BH-3P 后，120 必须清掉，否则会被误存。"""
-    dialog = make_dialog(ConnectionEntry(connection="BH-1D", client="120"))
-    dialog.connection_edit.setCurrentText("BH-3P")
+    """DEV-1/120 改成 PRD-1 后，120 必须清掉，否则会被误存。"""
+    dialog = make_dialog(ConnectionEntry(connection="DEV-1", client="120"))
+    dialog.connection_edit.setCurrentText("PRD-1")
 
-    assert combo_items(dialog.client_edit) == ["800"]
+    assert combo_items(dialog.client_edit) == ["300"]
     assert dialog.client_edit.currentText() == ""
 
 
 def test_switching_back_refills_candidates():
-    dialog = make_dialog(ConnectionEntry(connection="BH-1D", client="120"))
-    dialog.connection_edit.setCurrentText("BH-3P")
-    dialog.connection_edit.setCurrentText("BH-1D")
+    dialog = make_dialog(ConnectionEntry(connection="DEV-1", client="120"))
+    dialog.connection_edit.setCurrentText("PRD-1")
+    dialog.connection_edit.setCurrentText("DEV-1")
     assert combo_items(dialog.client_edit) == ["110", "120"]
 
 
 def test_typed_value_not_in_candidates_survives():
     """景观文件里没有这个 client 时，手输的值要能留住（可输可选）。"""
-    dialog = make_dialog(ConnectionEntry(connection="BH-1D", client="999"))
+    dialog = make_dialog(ConnectionEntry(connection="DEV-1", client="999"))
     assert dialog.client_edit.currentText() == "999"
     assert dialog.client_edit.isEditable()
 
@@ -131,12 +131,12 @@ def test_typed_value_not_in_candidates_survives():
 # --------------------------------------------------------------------------- #
 def test_tcode_dropdown_prefilled_from_landscape():
     """client 120 对应的快捷方式 cmd=PO，自动进下拉。"""
-    dialog = make_dialog(ConnectionEntry(connection="BH-1D", client="120"))
+    dialog = make_dialog(ConnectionEntry(connection="DEV-1", client="120"))
     assert combo_items(dialog.tcode_edit) == ["PO"]
 
 
 def test_tcode_candidates_follow_client_change():
-    dialog = make_dialog(ConnectionEntry(connection="BH-1D", client="120"))
+    dialog = make_dialog(ConnectionEntry(connection="DEV-1", client="120"))
     dialog.client_edit.setCurrentText("110")
     assert combo_items(dialog.tcode_edit) == ["SE09"]
 
@@ -144,14 +144,14 @@ def test_tcode_candidates_follow_client_change():
 def test_tcode_typed_value_survives_client_change():
     """事务码跨 client 通用，换 client 不清空已填的值。"""
     dialog = make_dialog(ConnectionEntry(
-        connection="BH-1D", client="120", tcode="ZREPORT"))
+        connection="DEV-1", client="120", tcode="ZREPORT"))
     assert dialog.tcode_edit.currentText() == "ZREPORT"
     dialog.client_edit.setCurrentText("110")
     assert dialog.tcode_edit.currentText() == "ZREPORT"
 
 
 def test_result_entry_carries_tcode():
-    dialog = make_dialog(ConnectionEntry(connection="BH-1D", client="120", tcode="PO"))
+    dialog = make_dialog(ConnectionEntry(connection="DEV-1", client="120", tcode="PO"))
     dialog.tcode_edit.setCurrentText(" ZREPORT ")
     entry = dialog.result_entry()
     assert entry.tcode == "ZREPORT", "取值时要strip"
@@ -163,7 +163,7 @@ def test_result_entry_carries_tcode():
 def test_card_shows_env_badge():
     from PySide6.QtWidgets import QLabel
     card = gui_app.EntryCard(
-        ConnectionEntry(connection="BH-3P", client="800", user="u", password="p"),
+        ConnectionEntry(connection="PRD-1", client="300", user="u", password="p"),
         env="生产",
     )
     badges = [w for w in card.findChildren(QLabel) if w.objectName() == "envBadge"]
@@ -173,7 +173,7 @@ def test_card_shows_env_badge():
 def test_card_without_env_has_no_badge():
     from PySide6.QtWidgets import QLabel
     card = gui_app.EntryCard(
-        ConnectionEntry(connection="BH-1D", client="120", user="u", password="p"))
+        ConnectionEntry(connection="DEV-1", client="120", user="u", password="p"))
     assert not [w for w in card.findChildren(QLabel) if w.objectName() == "envBadge"]
 
 
@@ -203,9 +203,9 @@ def test_options_dialog_roundtrip():
 
 def test_options_dialog_keeps_legacy_client_rules():
     """旧的 SAP_CLIENT_MAP 兼容规则不能在保存全局设置时丢掉。"""
-    options = AppOptions(client_rules=[["8", "BH-3P"]])
+    options = AppOptions(client_rules=[["8", "PRD-1"]])
     saved = gui_app.OptionsDialog(options).result_options()
-    assert saved.client_rules == [["8", "BH-3P"]]
+    assert saved.client_rules == [["8", "PRD-1"]]
 
 
 def test_options_dialog_env_rules_roundtrip():
@@ -213,9 +213,9 @@ def test_options_dialog_env_rules_roundtrip():
     dialog = gui_app.OptionsDialog(options)
     assert dialog.env_edit.toPlainText() == "*D=开发\n*P=生产"
 
-    dialog.env_edit.setPlainText("*D=开发\nclient:800=生产")
+    dialog.env_edit.setPlainText("*D=开发\nclient:100=生产")
     saved = dialog.result_options()
-    assert saved.env_rules == [["*D", "开发"], ["client:800", "生产"]]
+    assert saved.env_rules == [["*D", "开发"], ["client:100", "生产"]]
 
 
 def test_confirm_path_skips_empty_and_missing():

@@ -4,8 +4,6 @@
 
 * 密码用 Windows DPAPI（`CryptProtectData`）加密后落盘，绑定当前 Windows 账号，
   配置文件里**不出现明文**；换机器或换登录用户后需要重新填一次密码。
-* 首次运行如果只找到旧的 `.env`，会自动迁移成 `config.json`，并把 `.env`
-  改名为 `.env.migrated` 留档，避免"改了 .env 却不生效"的困惑。
 * 保存采用"先写临时文件再替换"，中途崩溃不会把配置写坏。
 
 本模块不依赖 GUI，也不依赖 sap_core，方便单独测试。
@@ -23,8 +21,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from dotenv import dotenv_values
-
 try:
     import win32crypt
 except ImportError:  # pragma: no cover - 非 Windows 环境
@@ -37,7 +33,6 @@ except ImportError:  # pragma: no cover - 非 Windows 环境
 
 
 CONFIG_FILENAME = "config.json"
-LEGACY_ENV_FILENAME = ".env"
 CONFIG_VERSION = 1
 
 DEFAULT_SAPLOGON_PATH = r"C:\Program Files (x86)\SAP\FrontEnd\SAPgui\saplogon.exe"
@@ -74,12 +69,6 @@ DPAPI_PREFIX = "dpapi:"
 # 附加熵：本程序专用的"盐"，别的程序即使以同一 Windows 用户身份也解不开。
 DPAPI_ENTROPY = b"OpenSAPGUI/v1"
 DPAPI_DESCRIPTION = "OpenSAPGUI"
-
-LEGACY_PROFILE_PATTERN = re.compile(r"^SAP_CONN_([A-Za-z0-9_]+)_NAME$")
-# .env 里的密码行：迁移留档时要把值清空，明文密码不能留在磁盘上
-LEGACY_PASSWORD_LINE_PATTERN = re.compile(
-    r"^(\s*SAP_CONN_[A-Za-z0-9_]+_PASSWORD\s*=).*$", re.IGNORECASE | re.MULTILINE
-)
 
 
 class ConfigError(RuntimeError):
@@ -332,16 +321,16 @@ class AppOptions:
     connect_timeout: int = DEFAULT_CONNECT_TIMEOUT
     popup_timeout: int = DEFAULT_POPUP_TIMEOUT
     log_file: str = DEFAULT_LOG_FILE
-    # 兼容旧版 .env 的 SAP_CLIENT_MAP：client 前缀 -> 连接名。
-    # 命令行传 client 时如果匹配不到条目，就靠它兜底，保证旧快捷方式不改也能用。
+    # 兼容老快捷方式的 client 前缀规则：client 号以某几位开头时走哪个连接。
+    # 命令行传 client 时优先按已配置的条目找，找不到再用它兜底。
     client_rules: list[list[str]] = field(default_factory=list)
     # 下拉框的补充数据源：SAP Logon 景观文件（企业常统一放在共享盘，可在此指定）。
     # 留空则自动探测 %APPDATA%\SAP\Common 和注册表里配置的位置。
     landscape_file: str = ""
-    # client 下拉的兜底候选（如 "100,110,120,610,800"）。
+    # client 下拉的兜底候选（如 "100,200,300"）。
     # 目标电脑的 SAP Logon 里没建带 client 的快捷方式时用它，保证分发后仍有下拉可选。
     default_clients: str = ""
-    # 环境判定规则，如 [["*D", "开发"], ["*Q", "测试"], ["*P", "生产"], ["client:800", "生产"]]。
+    # 环境判定规则，如 [["*D", "开发"], ["*Q", "测试"], ["*P", "生产"], ["client:100", "生产"]]。
     # SAP 景观文件里没有环境信息，只能按用户的命名约定判，规则在全局设置里配。
     env_rules: list[list[str]] = field(default_factory=list)
     # 登录成功后主窗口怎么让位：minimize / behind / none，见 AFTER_LOGIN_CHOICES。
@@ -426,13 +415,10 @@ def sort_entries(entries: list["ConnectionEntry"]) -> list["ConnectionEntry"]:
 # 存储
 # --------------------------------------------------------------------------- #
 class ConfigStore:
-    """config.json 的读写，以及从旧 .env 的一次性迁移。"""
+    """config.json 的读写与加解密。"""
 
     def __init__(self, path: Optional[Path] = None) -> None:
         self.path = Path(path) if path else default_config_path()
-        # 最近一次 load() 是否刚完成 .env -> config.json 的迁移。
-        # 界面用它决定要不要弹"请补全 client"的提示，只提示这一次。
-        self.migrated_last_load = False
         # 最近一次 load() 里有几条连接的密码本机解不开（配置来自别的电脑）。
         self.locked_password_last_load = 0
 
@@ -440,21 +426,11 @@ class ConfigStore:
     def exists(self) -> bool:
         return self.path.is_file()
 
-    def legacy_env_path(self) -> Path:
-        return self.path.parent / LEGACY_ENV_FILENAME
-
     def load(self) -> AppConfig:
-        """读取配置；文件不存在时尝试从 .env 迁移，再不行就返回默认配置。"""
-        self.migrated_last_load = False
+        """读取配置；文件不存在时返回默认配置。"""
         self.locked_password_last_load = 0
         if self.exists():
             return self._load_file()
-
-        migrated = self._migrate_from_env()
-        if migrated is not None:
-            self.migrated_last_load = True
-            self.save(migrated)
-            return migrated
         return AppConfig()
 
     def _load_file(self) -> AppConfig:
@@ -507,99 +483,6 @@ class ConfigStore:
         except OSError as exc:
             raise ConfigError(f"无法写入配置文件 {self.path}: {exc}") from exc
 
-    # ---------------- 从旧 .env 迁移 ---------------- #
-    def _migrate_from_env(self) -> Optional[AppConfig]:
-        env_path = self.legacy_env_path()
-        if not env_path.is_file():
-            return None
-
-        values = {
-            str(key).strip().upper(): str(value)
-            for key, value in dotenv_values(env_path).items()
-            if value is not None
-        }
-        if not values:
-            return None
-
-        options = AppOptions(
-            saplogon_path=_as_text(values.get("SAPLOGON_PATH")) or DEFAULT_SAPLOGON_PATH,
-            startup_timeout=_as_positive_int(
-                values.get("SAP_STARTUP_TIMEOUT"), DEFAULT_STARTUP_TIMEOUT
-            ),
-            connect_timeout=_as_positive_int(
-                values.get("SAP_CONNECT_TIMEOUT"), DEFAULT_CONNECT_TIMEOUT
-            ),
-            popup_timeout=_as_positive_int(values.get("SAP_POPUP_TIMEOUT"), DEFAULT_POPUP_TIMEOUT),
-            log_file=_as_text(values.get("SAP_LOG_FILE")),
-            client_rules=_parse_rule_text(_as_text(values.get("SAP_CLIENT_MAP"))),
-        )
-
-        default_client = _as_text(values.get("SAP_DEFAULT_CLIENT")).strip()
-        fallback_name = _as_text(values.get("SAP_CLIENT_FALLBACK")).strip()
-        rule_targets = {name.lower() for _prefix, name in options.client_rules}
-
-        entries: list[ConnectionEntry] = []
-        for profile_id, name in _iter_legacy_profiles(values):
-            # 旧 .env 只有"client 前缀 -> 连接名"的规则，没有完整 client。
-            # 只有兜底连接能确定地用 SAP_DEFAULT_CLIENT，其余留空由用户在界面上补，
-            # 这里不去猜一个假的 client 出来。
-            client = ""
-            if name.lower() == fallback_name.lower() or name.lower() not in rule_targets:
-                client = default_client
-
-            entries.append(
-                ConnectionEntry(
-                    connection=name,
-                    client=client,
-                    user=_as_text(values.get(f"SAP_CONN_{profile_id}_USER")).strip(),
-                    password=_as_text(values.get(f"SAP_CONN_{profile_id}_PASSWORD")),
-                    label=name,
-                )
-            )
-
-        if not entries:
-            # .env 存在但没有连接配置，别迁移出个空壳，交给用户从零开始配
-            return None
-
-        self._archive_legacy_env(env_path)
-        return AppConfig(options=options, entries=entries)
-
-    @staticmethod
-    def _archive_legacy_env(env_path: Path) -> None:
-        """把已迁移的 .env 改名留档，**并抹掉里面的明文密码**。
-
-        留档是为了让用户还能对照原来配了哪些连接；但明文密码不能继续留在磁盘上，
-        否则"密码已加密保存"就只是自欺欺人。所以这里是"清洗后另存 + 删除原文件"，
-        而不是简单改名。
-        """
-        target = env_path.with_name(env_path.name + ".migrated")
-        try:
-            text = env_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            return
-
-        # 把密码值清空，只留下键名
-        cleaned = LEGACY_PASSWORD_LINE_PATTERN.sub(lambda match: match.group(1), text)
-        cleaned += (
-            "\n"
-            "# ------------------------------------------------------------\n"
-            "# 这是旧版 .env 的留档，程序已不再读取它。\n"
-            "# 密码已迁移到 config.json 并用 Windows DPAPI 加密，故此处已清空。\n"
-            "# 需要修改配置请直接打开程序界面（双击 OpenSAPGUI.exe）。\n"
-        )
-
-        try:
-            if target.exists():
-                target.unlink()
-            target.write_text(cleaned, encoding="utf-8")
-        except OSError:
-            return  # 留档写不成功就别删原文件，宁可让用户自己处理
-
-        try:
-            env_path.unlink()
-        except OSError:
-            pass
-
 
 # --------------------------------------------------------------------------- #
 # 小工具
@@ -633,8 +516,8 @@ def parse_env_rules(text: str) -> list[list[str]]:
 
     关键词三种写法：
       *D          连接名以 D 结尾（大小写不敏感）
-      BH-3P       连接名包含该词
-      client:800  client 号等于 800
+      PRD-1       连接名包含该词
+      client:100  client 号等于 100
     """
     rules: list[list[str]] = []
     for chunk in ENV_RULE_SEPARATOR.split(_as_text(text)):
@@ -692,7 +575,7 @@ def _as_positive_int(value: Any, default: int) -> int:
 
 
 def _parse_rule_text(raw: str) -> list[list[str]]:
-    """解析 '8:BH-3P,6:BH-2Q'，容错全角冒号/逗号。"""
+    """解析 '1:PRD-1,2:QAS-1'，容错全角冒号/逗号。"""
     normalized = raw.replace("：", ":").replace("，", ",")
     rules: list[list[str]] = []
     for chunk in normalized.split(","):
@@ -717,11 +600,3 @@ def _as_rules(raw: Any) -> list[list[str]]:
             if prefix and name:
                 rules.append([prefix, name])
     return rules
-
-
-def _iter_legacy_profiles(values: dict[str, str]) -> Iterable[tuple[str, str]]:
-    """按 .env 里 SAP_CONN_<ID>_NAME 的出现顺序产出 (ID, 连接名)。"""
-    for key, value in values.items():
-        match = LEGACY_PROFILE_PATTERN.match(key)
-        if match and value.strip():
-            yield match.group(1).upper(), value.strip()

@@ -1,5 +1,10 @@
 # OpenSAPGUI · SAP GUI 自动登录
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey.svg)](#环境要求)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](requirements.txt)
+[![Tests](https://img.shields.io/badge/tests-148%20passed-brightgreen.svg)](#测试)
+
 一键登录 SAP，可选直接进入指定事务码。图形界面里单击卡片即可登录，也支持命令行调用（给快捷方式 / 计划任务用）。
 连接配置全部保存在本地，**密码用 Windows DPAPI 加密，仓库里没有任何明文凭据**。
 
@@ -40,7 +45,6 @@
 ```
 PySide6-Essentials>=6.6   # 图形界面。只装 Essentials 就够 QtCore/QtGui/QtWidgets
 pywin32>=306              # SAP COM 自动化 + DPAPI 密码加密
-python-dotenv>=1.0.0      # 仅用于把旧版 .env 一次性迁移到 config.json
 pyinstaller>=6.0          # 打包 exe 时使用
 ```
 
@@ -60,7 +64,7 @@ pyinstaller>=6.0          # 打包 exe 时使用
 ### 方式二：从源码运行
 
 ```bat
-git clone git@github.com:andymeng429/Sap_autoLogin.git
+git clone https://github.com/andymeng429/Sap_autoLogin.git
 cd Sap_autoLogin
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -99,10 +103,10 @@ python -m venv .venv
 **环境徽章**：SAP 本身不提供「这套系统是开发还是生产」的信息，所以按你的命名约定判——在「全局设置 → 环境判定规则」里配，每行一条「关键词=环境」，先命中先用：
 
 ```
-*D=开发       连接名以 D 结尾
-*Q=测试       连接名以 Q 结尾
-BH-3P=生产    连接名包含 BH-3P
-client:800=生产   client 号等于 800
+*D=开发          连接名以 D 结尾
+*Q=测试          连接名以 Q 结尾
+PRD-1=生产       连接名包含 PRD-1
+client:100=生产  client 号等于 100
 ```
 
 徽章颜色按环境名自动配色：含「生产 / prod / prd」为红，含「测试 / 质量 / uat / qa / test」为琥珀，含「开发 / dev」为蓝，其余灰色。
@@ -124,8 +128,8 @@ client:800=生产   client 号等于 800
 OpenSAPGUI.exe                      :: 图形界面
 OpenSAPGUI.exe --gui                :: 同上，显式指定
 OpenSAPGUI.exe 120 BP               :: 登录 client=120 的条目，并进入 BP
-OpenSAPGUI.exe 800 MM03             :: client 以 8 开头 -> 按映射规则走 BH-3P
-OpenSAPGUI.exe --connection BH-3P   :: 直接点名连接
+OpenSAPGUI.exe 100 MM03             :: client 以 1 开头 -> 按映射规则走 PRD-1
+OpenSAPGUI.exe --connection PRD-1   :: 直接点名连接
 OpenSAPGUI.exe --list               :: 列出已配置的连接后退出
 ```
 
@@ -143,7 +147,7 @@ OpenSAPGUI.exe --list               :: 列出已配置的连接后退出
 | `--keep-open` | 结束后等待回车再关窗口（仅控制台版有意义）|
 | `-v, --verbose` | 输出调试日志 |
 
-**兼容旧快捷方式**：以前的脚本习惯用「client 前缀 → 连接」的映射（如 `800` 走 `BH-3P`）。这套规则保留在全局设置的 `client_rules` 里，所以老的 `OpenSAPGUI.exe 800` 快捷方式不用改也照常工作：先按 client 找已配置的条目，找不到再用前缀规则兜底。
+**兼容旧快捷方式**：以前的脚本习惯用「client 前缀 → 连接」的映射（如 `100` 走 `PRD-1`）。这套规则保留在全局设置的 `client_rules` 里，所以老的 `OpenSAPGUI.exe 100` 快捷方式不用改也照常工作：先按 client 找已配置的条目，找不到再用前缀规则兜底。
 
 ---
 
@@ -160,9 +164,9 @@ OpenSAPGUI.exe --list               :: 列出已配置的连接后退出
     "connect_timeout": 30,          // 等连接建立
     "popup_timeout": 8,             // 等登录弹窗
     "log_file": "OpenSAPGUI.log",   // 相对路径 = 程序目录；留空则不写文件
-    "client_rules": [["8", "BH-3P"], ["6", "BH-2Q"]],  // 旧快捷方式兼容规则
+    "client_rules": [["1", "PRD-1"], ["2", "QAS-1"]],  // 旧快捷方式兼容规则
     "landscape_file": "",           // SAP 景观文件路径，留空自动探测
-    "default_clients": "100,110,120,610,800",  // client 下拉兜底候选
+    "default_clients": "100,200,300",  // client 下拉兜底候选
     "env_rules": [["*D", "开发"], ["*Q", "测试"], ["*P", "生产"]],
     "after_login": "minimize"       // minimize / behind / none
   },
@@ -170,7 +174,7 @@ OpenSAPGUI.exe --list               :: 列出已配置的连接后退出
     {
       "id": "e1a2b3c4",
       "label": "",                  // 留空则显示「connection / client」
-      "connection": "BH-1D",
+      "connection": "DEV-1",
       "client": "120",
       "user": "YOUR_USER",
       "password": "dpapi:AQAAAN...",  // DPAPI 密文，绑定当前 Windows 账号
@@ -181,8 +185,6 @@ OpenSAPGUI.exe --list               :: 列出已配置的连接后退出
   ]
 }
 ```
-
-**从旧的 `.env` 迁移**：首次运行如果发现旧的 `.env`，会自动生成 `config.json` 并把 `.env` 改名为 `.env.migrated` 留档。旧 `.env` 只有 client 前缀规则、没有完整 client，所以迁移时**除兜底连接外 client 一律留空**，界面上会提示你补全（这是故意不猜）。
 
 **密码是怎么存的**：用 Windows DPAPI（`CryptProtectData`，附加熵 `OpenSAPGUI/v1`）加密，密钥绑定当前 Windows 用户。换电脑或重装系统后解不开——此时程序不会报错崩溃，而是把该条目的**其它字段照常加载、只留空密码**，界面提示你重填。这是设计取舍：密码不跨机可解，也就没有可搬运的密钥。
 
@@ -212,7 +214,7 @@ OpenSAPGUI.exe --list               :: 列出已配置的连接后退出
 |---|---|
 | `OpenSAPGUI.py` | 入口：参数分发（GUI / CLI）、单实例互斥体、控制台隐藏、未捕获异常兜底 |
 | `sap_core.py` | SAP 会话封装与登录流程，**不依赖任何 GUI 库**，界面和命令行共用 |
-| `config_store.py` | `config.json` 读写、DPAPI 加解密、旧 `.env` 迁移、环境判定规则解析 |
+| `config_store.py` | `config.json` 读写、DPAPI 加解密、环境判定规则解析 |
 | `gui_app.py` | PySide6 界面：卡片列表、编辑 / 全局设置对话框、后台登录线程 |
 | `sap_landscape.py` | 只读解析 SAP Logon 景观文件（`SAPUILandscape.xml` / `saplogon.ini`），给下拉框供数据 |
 | `win_focus.py` | Windows 窗口层级：把主窗口让到 SAP GUI 后面、把已有窗口拉到前台。缺 pywin32 时静默退化 |
@@ -238,11 +240,11 @@ OpenSAPGUI.exe --list               :: 列出已配置的连接后退出
 run_tests.bat
 ```
 
-8 个测试文件、共 **151 项**，**全部是 mock**：不连真实 SAP、不动真实窗口、不需要 `config.json`。
+8 个测试文件、共 **148 项**，**全部是 mock**：不连真实 SAP、不动真实窗口、不需要 `config.json`。
 
 | 测试 | 覆盖 |
 |---|---|
-| `test_config_store.py` | 配置读写、DPAPI 往返、client 列表解析、环境规则匹配、排序、旧 `.env` 迁移 |
+| `test_config_store.py` | 配置读写、DPAPI 往返、client 列表解析、环境规则匹配、排序 |
 | `test_sap_landscape.py` | 景观文件解析（XML / INI）、连接名与 client / tcode 候选 |
 | `test_entry_dialog.py` | 编辑对话框：字段校验、下拉联动、往返 |
 | `test_login_verify.py` | 登录结果校验的三种分支（成功 / 报错弹窗 / 控件缺失）|
@@ -265,7 +267,7 @@ run_tests.bat
 DPAPI 密文绑定原电脑的 Windows 账号，换机解不开——这是设计而非缺陷。填一次即可，之后照常。
 
 **连接名 / client 下拉是空的？**
-下拉数据来自本机 SAP Logon 的景观文件。程序会自动探测 `%APPDATA%\SAP\Common` 和注册表里的配置位置；如果你们的景观文件在共享盘，去「全局设置」里手动指定。另外在「全局设置」里填「默认 client 候选」（如 `100,110,120,610,800`）可以保证任何机器上都有下拉可选。
+下拉数据来自本机 SAP Logon 的景观文件。程序会自动探测 `%APPDATA%\SAP\Common` 和注册表里的配置位置；如果你们的景观文件在共享盘，去「全局设置」里手动指定。另外在「全局设置」里填「默认 client 候选」（如 `100,200,300`）可以保证任何机器上都有下拉可选。
 
 **登录报错说脚本被禁用？**
 需要在 SAP GUI 客户端打开脚本开关，并由管理员给账号分配 `SAP GUI Scripting` 权限。这是服务端管控，工具本身绕不过去。
@@ -280,10 +282,40 @@ DPAPI 密文绑定原电脑的 Windows 账号，换机解不开——这是设�
 
 ## 安全说明
 
-- 仓库里**不包含**任何真实凭据：`.env`、`.env.migrated`、`config.json`、`*.log` 均已在 `.gitignore` 中排除；
+- 仓库里**不包含**任何真实凭据：`config.json`（连接名 / 用户名 / 加密密码）与 `*.log` 均已在 `.gitignore` 中排除；
 - 密码仅以 DPAPI 密文形式落在本机 `config.json`，内存中的明文不写日志（`LoginTarget.__repr__` 会把密码显示为 `***`）；
-- `.env.example` 只是配置模板，里面的连接名 / 账号均为占位符；
 - 用 `--password` 传密码会暴露在命令行里（同机其它进程可见），仅在临时排障时使用。
+
+---
+
+## 参与贡献
+
+Issue 和 PR 都欢迎。提交前请确认：
+
+- 跑一遍 `run_tests.bat`，全部用例必须通过；
+- 新增登录相关逻辑时，同步在 `tests\` 里补 mock 用例，覆盖「成功 / 报错弹窗 / 控件缺失」三类分支；
+- **提交里不要出现任何真实凭据、连接名、client 号或公司系统信息**，示例一律用 `PRD-1D` / `100` 这类占位符；
+- 界面改动请顺手检查卡片布局仍然只有两行。
+
+---
+
+## License
+
+本项目采用 **MIT 许可证**，全文见 [LICENSE](LICENSE)。
+
+这意味着你可以自由地使用、修改、分发、甚至商用，唯一的要求是保留版权声明和许可声明。作者不对软件做任何担保。
+
+### 第三方依赖许可
+
+分发的程序里打包了以下依赖：
+
+| 依赖 | 许可 | 说明 |
+|---|---|---|
+| PySide6-Essentials（Qt for Python） | LGPL-3.0 | 界面框架 |
+| pywin32 | PSF | SAP COM 自动化、DPAPI 加密 |
+| PyInstaller | GPL-2.0-or-later（含打包例外） | 打包工具，其例外条款允许打包非 GPL 代码 |
+
+关于 Qt 的 LGPL 义务：本项目以**动态链接**方式使用 Qt —— onedir 打包把 Qt 的 DLL 作为独立文件放在 `_internal\` 目录里，没有静态链接进 exe，因此满足 LGPL-3.0「允许使用者替换库文件」的要求。未对 Qt 源码做过任何修改，有意替换 Qt 版本的话直接换掉 `_internal\` 下的对应 DLL 即可。
 
 ---
 
@@ -291,9 +323,3 @@ DPAPI 密文绑定原电脑的 Windows 账号，换机解不开——这是设�
 
 本工具通过 SAP GUI Scripting 接口驱动 SAP GUI for Windows 完成登录，**仅供在你已获授权的 SAP 系统与账号上使用**。
 请遵守所在组织的 IT 与安全规范；因使用本工具产生的任何后果由使用者自行承担。
-
----
-
-## License
-
-私人项目，未指定开源许可。

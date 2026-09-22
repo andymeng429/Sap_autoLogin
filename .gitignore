@@ -1,10 +1,10 @@
-# 含明文密码，绝不能入库
-.env
-.env.migrated
-
 # 本地配置：连接名 / 用户名 / DPAPI 加密密码都在里面，仅存本机
 config.json
 config.json.tmp
+
+# 凭据类文件一律挡住（本程序已不使用 .env 配置，纯属防误提交的安全网）
+.env
+.env.*
 
 # Python
 __pycache__/

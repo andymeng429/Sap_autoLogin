@@ -177,7 +177,7 @@ def parse_saplogon_ini(path: Path) -> list[SapService]:
         if not name:
             continue
         client = clients.get(index, "")
-        # System 列形如 "BH-1D : : /H/host/S/3200"，只取路由前第一个字段做核对
+        # System 列形如 "DEV-1 : : /H/host/S/3200"，只取路由前第一个字段做核对
         system_name = systems.get(index, "").split(":")[0].strip()
         services.append(
             SapService(

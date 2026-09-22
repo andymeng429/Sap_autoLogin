@@ -463,7 +463,7 @@ class EntryDialog(QDialog):
     def _update_client_items(self, connection: str) -> None:
         """连接名变化时刷新 client 候选，并清空已填的 client。
 
-        清空是刻意的：把 BH-1D/120 改成 BH-3P 时，120 对 BH-3P 无效，
+        清空是刻意的：把 DEV-1/120 改成 PRD-1 时，120 对 PRD-1 无效，
         留着会被误存。构造时紧接着会把配置里存的值写回，所以编辑已有条目不丢值。
         """
         self.client_edit.clear()
@@ -561,7 +561,7 @@ class OptionsDialog(QDialog):
         )
 
         self.clients_edit = QLineEdit(options.default_clients)
-        self.clients_edit.setPlaceholderText("如 100,110,120,610,800（逗号或空格分隔）")
+        self.clients_edit.setPlaceholderText("如 100,200,300（逗号或空格分隔）")
         form.addRow("默认 Client 候选", self.clients_edit)
 
         self.env_edit = QPlainTextEdit(env_rules_to_text(options.env_rules))
@@ -570,7 +570,7 @@ class OptionsDialog(QDialog):
             "*D=开发          连接名以 D 结尾算开发\n"
             "*Q=测试\n"
             "*P=生产\n"
-            "client:800=生产   也可以只按 client 号判"
+            "client:100=生产   也可以只按 client 号判"
         )
         self.env_edit.setFixedHeight(96)
         form.addRow("环境判定规则", self.env_edit)
@@ -766,9 +766,7 @@ class MainWindow(QWidget):
         self._build_ui()
         self.reload()
 
-        if self.store.migrated_last_load:
-            self._notify_about_migration()
-        elif self.store.locked_password_last_load:
+        if self.store.locked_password_last_load:
             self._notify_about_locked_passwords()
 
     def _notify_about_locked_passwords(self) -> None:
@@ -781,27 +779,6 @@ class MainWindow(QWidget):
             "（重装系统同理）。\n\n"
             "连接名、client、用户名、备注都已保留，"
             "点对应卡片的「编辑」把密码重填一次就能继续用。",
-        )
-
-    def _notify_about_migration(self) -> None:
-        """从旧 .env 迁移完成后说明情况，特别是哪些条目还缺 client。"""
-        incomplete = [entry for entry in self.config.entries if not entry.is_complete]
-        if not incomplete:
-            QMessageBox.information(
-                self, "配置已迁移",
-                "已把旧的 .env 配置迁移到 config.json，密码已加密保存。\n"
-                "旧文件改名为 .env.migrated 留档，之后改动 .env 不再生效。",
-            )
-            return
-
-        names = "\n".join(f"· {entry.connection}" for entry in incomplete)
-        QMessageBox.information(
-            self, "配置已迁移，还有几项要补",
-            "已把旧的 .env 配置迁移到 config.json，密码已加密保存。\n\n"
-            "旧配置里只记录了 client 的开头数字，没有完整 client，"
-            "所以下面这些连接还缺 client，请点卡片上的「编辑」补全：\n"
-            f"{names}\n\n"
-            "补全前这些条目暂时不能单击登录。旧文件已改名为 .env.migrated 留档。",
         )
 
     # ---------------- 界面搭建 ---------------- #

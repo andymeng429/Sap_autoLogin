@@ -45,8 +45,6 @@ a = Analysis(
         'pythoncom',
         'pywintypes',
         'win32crypt',
-        # 配置解析
-        'dotenv',
         # 本项目的模块（gui_app 是在函数内延迟导入的，显式列出更保险）
         'sap_core',
         'config_store',
