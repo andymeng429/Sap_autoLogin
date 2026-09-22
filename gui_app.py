@@ -300,7 +300,10 @@ class EntryCard(QFrame):
 
     # ---------------- 状态 ---------------- #
     def _show_state(self, message: str, warning: bool = False) -> None:
-        """统一的状态行入口：message 为空就把这一行收起来，卡片回到两行高度。"""
+        """状态行唯一的用途是「还缺 xxx」这种常驻提醒；message 为空就收起这一行。
+
+        登录进度**不走这里**——登录中卡片布局必须纹丝不动。
+        """
         self.state_label.setObjectName("cardWarn" if warning else "cardSub")
         self.state_label.setText(message)
         self.state_label.setVisible(bool(message))
@@ -310,7 +313,12 @@ class EntryCard(QFrame):
         self.state_label.updateGeometry()
         self.updateGeometry()
 
-    def set_busy(self, busy: bool, message: str = "") -> None:
+    def set_busy(self, busy: bool) -> None:
+        """标记登录中。**只改样式、光标和按钮，绝不动卡片布局**——
+
+        卡片永远保持两行：登录进度显示在窗口底部的状态栏，不在卡片上
+        出现第三行（会撑高卡片、整列跟着跳，用户明确不要）。
+        """
         self._busy = busy
         self.setProperty("busy", "true" if busy else "false")
         self.style().unpolish(self)
@@ -320,29 +328,6 @@ class EntryCard(QFrame):
         self.pin_button.setEnabled(not busy)
         self.edit_button.setEnabled(not busy)
         self.delete_button.setEnabled(not busy)
-
-        if busy:
-            self._show_state(message or "正在登录…")
-        else:
-            self._show_state("")
-
-    def set_message(self, message: str, warning: bool = False) -> None:
-        self.set_busy(False)
-        self._show_state(message, warning=warning)
-
-    def clear_message(self) -> None:
-        """收工：登录结束后不留任何临时提示（成败都一样）。
-
-        成功不再写「已登录」——多一行会把卡片撑高；失败的详情已经在弹窗和
-        状态栏说了，卡片上再挂一行黄字纯属噪音。只有"字段没填全"属于常驻
-        信息，继续留着。
-        """
-        self.set_busy(False)
-        if not self.entry.is_complete:
-            self._show_state(
-                "还缺：" + "、".join(self.entry.missing_fields()) + "，请点「编辑」补全",
-                warning=True,
-            )
 
     # ---------------- 事件 ---------------- #
     def _on_pin(self) -> None:
@@ -1036,7 +1021,7 @@ class MainWindow(QWidget):
         self._start_login(target)
 
     def _start_login(self, target: LoginTarget) -> None:
-        self._set_login_state(True, target.label)
+        self._set_login_state(True)
 
         thread = LoginThread(self._settings(), target, tcode=None)
         thread.progressed.connect(self._on_progress)
@@ -1045,31 +1030,20 @@ class MainWindow(QWidget):
         self.login_thread = thread
         thread.start()
 
-    def _set_login_state(self, busy: bool, label: str = "") -> None:
+    def _set_login_state(self, busy: bool) -> None:
         self.add_button.setEnabled(not busy)
         self.options_button.setEnabled(not busy)
         for card in self.cards:
-            if busy and card.entry.display_name == label:
-                card.set_busy(True, "正在登录…")
-            elif busy:
-                card.set_busy(True, "等待中…")
-            else:
-                card.set_busy(False)
+            card.set_busy(busy)
 
     def _on_progress(self, message: str) -> None:
+        # 进度只进状态栏。卡片上不写字——多一行会把卡片撑高、整列跳动。
         self.status_label.setText(message)
-        for card in self.cards:
-            if card._busy:
-                card._show_state(message)
 
     def _on_login_finished(self, success: bool, title: str, detail: str) -> None:
         self.login_thread = None
-        self.add_button.setEnabled(True)
-        self.options_button.setEnabled(True)
-
-        # 不管成败，卡片都收回两行的紧凑样子：结果看状态栏，细节看弹窗
-        for card in self.cards:
-            card.clear_message()
+        # 卡片自始至终保持两行：恢复按钮即可，布局从不因登录而变
+        self._set_login_state(False)
 
         if success:
             self.status_label.setText(detail)

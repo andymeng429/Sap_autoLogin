@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Mock 测试：登录结束后卡片不留多余那一行 + 主窗口怎么让位。
+"""Mock 测试：卡片自始至终保持两行（登录中也不例外）+ 主窗口怎么让位。
 
 离屏渲染，不弹真窗口，也不连 SAP。
 直接运行：python tests/test_card_state.py
@@ -65,70 +65,57 @@ def test_complete_card_starts_without_state_row():
     assert card.state_label.text() == ""
 
 
-def test_busy_shows_progress_row():
-    card = make_card()
-    card.set_busy(True)
-    assert row_visible(card) is True
-    assert card.state_label.text() == "正在登录…"
-    assert card.state_label.objectName() == "cardSub", "登录中不是警告"
-
-
-def test_clear_message_removes_the_extra_row():
-    """用户点名的那个问题：登录成功后卡片多一行、行高变高。"""
+def test_busy_keeps_card_two_rows():
+    """登录中卡片纹丝不动：不出现第三行，高度也不变。"""
     card = make_card()
     card.show()
     APP.processEvents()
     compact_height = card.sizeHint().height()
 
-    card.set_busy(True, "正在登录…")
+    card.set_busy(True)
     APP.processEvents()
-    assert card.sizeHint().height() > compact_height, "登录中多一行本来就该高一点"
-
-    card.clear_message()
-    APP.processEvents()
-    assert row_visible(card) is False, "登录结束后不该留状态行"
-    assert card._busy is False
-    assert card.sizeHint().height() == compact_height, "卡片要缩回两行的紧凑高度"
+    assert row_visible(card) is False, "登录中也不该冒出第三行"
+    assert card.sizeHint().height() == compact_height, "卡片高度必须保持不变"
+    assert card._busy is True
+    assert card.edit_button.isEnabled() is False, "登录中按钮要禁用"
     card.close()
 
 
-def test_set_message_empty_hides_row():
+def test_progress_never_touches_the_card():
+    """登录进度只进状态栏，卡片连文本都不被碰一下。"""
+    window, folder = make_window()
     card = make_card()
-    card.set_message("已登录")
-    assert row_visible(card) is True
-    card.set_message("")
-    assert row_visible(card) is False
+    card.show()
+    APP.processEvents()
+    window.cards.append(card)
+    try:
+        window._on_progress("正在启动 SAP Logon…")
+        assert window.status_label.text() == "正在启动 SAP Logon…"
+        assert row_visible(card) is False, "进度行不许出现在卡片上"
+        assert card.state_label.text() == "", "卡片文本都不能变"
+    finally:
+        teardown(window, folder)
 
 
-def test_set_busy_false_also_hides_row():
+def test_set_busy_false_restores_buttons():
     card = make_card()
-    card.set_busy(True, "等待中…")
+    card.set_busy(True)
     card.set_busy(False)
     assert row_visible(card) is False
     assert card._busy is False
-
-
-def test_clear_message_restores_buttons():
-    card = make_card()
-    card.set_busy(True)
-    assert card.edit_button.isEnabled() is False
-    card.clear_message()
     assert card.edit_button.isEnabled() is True
     assert card.delete_button.isEnabled() is True
     assert card.pin_button.isEnabled() is True
 
 
 def test_incomplete_card_keeps_its_hint():
-    """"还缺 xxx"是常驻信息，收工后要留着——但它不是登录状态。"""
+    """"还缺 xxx"是常驻信息，登录中也不能被挤掉——但布局仍然不动。"""
     card = make_card(INCOMPLETE)
     assert row_visible(card) is True
     assert card.state_label.objectName() == "cardWarn"
 
-    card.set_busy(True, "正在登录…")
-    assert card.state_label.objectName() == "cardSub"
-
-    card.clear_message()
-    assert row_visible(card) is True
+    card.set_busy(True)
+    assert row_visible(card) is True, "常驻提醒登录中也要留着"
     assert card.state_label.objectName() == "cardWarn"
     assert "还缺" in card.state_label.text()
 
@@ -139,12 +126,14 @@ def test_incomplete_card_keeps_its_hint():
 def test_finish_clears_cards_and_status_text():
     window, folder = make_window()
     card = make_card()
-    card.set_busy(True, "正在登录…")
+    card.set_busy(True)
     window.cards.append(card)
 
     window._on_login_finished(True, "登录成功", "BH-1D / 120")
     try:
         assert row_visible(card) is False
+        assert card._busy is False
+        assert card.edit_button.isEnabled() is True, "结束后按钮要恢复"
         assert window.status_label.text() == "BH-1D / 120"
         assert "已登录" not in window.status_label.text(), "状态栏也不要再挂「已登录」"
     finally:
@@ -152,7 +141,7 @@ def test_finish_clears_cards_and_status_text():
 
 
 def test_finish_hides_warning_row_on_failure():
-    """失败详情在弹窗和状态栏里说了，卡片上不再挂黄字。"""
+    """失败详情在弹窗和状态栏里说了，卡片上不挂黄字。"""
     window, folder = make_window()
     card = make_card()
     card.set_busy(True)
