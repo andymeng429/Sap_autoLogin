@@ -66,6 +66,54 @@ def test_entry_module_imports_cleanly():
     """入口模块只定义不执行：import 不该有副作用（不开线程、不读配置）。"""
     assert callable(OpenSAPGUI.cleanup_stale_mei)
     assert callable(OpenSAPGUI.main)
+    assert callable(OpenSAPGUI.acquire_single_instance_lock)
+    assert callable(OpenSAPGUI.release_single_instance_lock)
+
+
+def test_single_instance_lock_blocks_second_acquire():
+    """锁被别的实例占着时必须拿不到；对方释放后要能重新拿到。"""
+    if sys.platform != "win32":
+        print("SKIP 非 Windows 平台")
+        return
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    name = r"Local\OpenSAPGUI.test.%d" % os.getpid()
+    OpenSAPGUI.release_single_instance_lock()      # 防止其它用例残留状态
+    try:
+        holder = kernel32.CreateMutexW(None, False, name)   # 模拟另一个实例
+        assert OpenSAPGUI.acquire_single_instance_lock(name) is False, \
+            "锁被别人占着时必须拿不到"
+        kernel32.CloseHandle(holder)
+        assert OpenSAPGUI.acquire_single_instance_lock(name) is True, \
+            "别人释放后要能拿到"
+    finally:
+        OpenSAPGUI.release_single_instance_lock()
+
+
+def test_run_gui_entry_exits_when_already_running():
+    """已有实例时二次启动必须悄悄退出，且把已有窗口拉到前台。"""
+    calls = []
+    original_acquire = OpenSAPGUI.acquire_single_instance_lock
+    original_bring = OpenSAPGUI.bring_window_to_front
+    OpenSAPGUI.acquire_single_instance_lock = lambda name=None: False
+    OpenSAPGUI.bring_window_to_front = lambda title: calls.append(title) or True
+
+    saved = sys.modules.get("gui_app")
+    sys.modules["gui_app"] = None      # 哨兵：真被 import 就会直接报错
+    try:
+        rc = OpenSAPGUI.run_gui_entry([])
+    finally:
+        OpenSAPGUI.acquire_single_instance_lock = original_acquire
+        OpenSAPGUI.bring_window_to_front = original_bring
+        if saved is None:
+            sys.modules.pop("gui_app", None)
+        else:
+            sys.modules["gui_app"] = saved
+
+    assert rc == 0, "已有一个实例在跑时，第二次启动要安静地退出"
+    assert calls == [OpenSAPGUI.WINDOW_TITLE], "要把已有窗口拉到前台"
+    assert saved is None or "gui_app" in sys.modules
 
 
 def test_spec_stays_folder_mode():

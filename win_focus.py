@@ -73,6 +73,49 @@ def find_sap_window() -> int:
     return 0
 
 
+def bring_window_to_front(title: str) -> bool:
+    """按标题找可见顶层窗口，最小化就还原并拉到前台。找到返回 True。
+
+    给"程序已在运行"的第二次启动用：与其弹个"已经在运行"的框让用户
+    自己去找窗口，不如直接把那个窗口带回来。
+    """
+    win32gui, win32con = _win32()
+    if win32gui is None or not title:
+        return False
+
+    found: list[int] = []
+
+    def collect(hwnd, _param) -> None:
+        try:
+            if win32gui.IsWindowVisible(hwnd) and win32gui.GetWindowText(hwnd) == title:
+                found.append(hwnd)
+        except Exception:  # noqa: BLE001 - 枚举途中窗口可能已经销毁
+            return
+
+    try:
+        win32gui.EnumWindows(collect, None)
+    except Exception:  # noqa: BLE001
+        LOGGER.warning("枚举窗口失败，无法定位已有主窗口", exc_info=True)
+        return False
+
+    if not found:
+        return False
+
+    hwnd = found[0]
+    try:
+        if win32gui.IsIconic(hwnd):
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)   # 最小化着就还原
+        else:
+            win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+        win32gui.SetForegroundWindow(hwnd)
+        if win32gui.GetForegroundWindow() != hwnd:
+            # 前台被锁定时不硬抢（Windows 不给跨进程抢焦点），闪任务栏提示
+            win32gui.FlashWindow(hwnd, True)
+    except Exception:  # noqa: BLE001
+        LOGGER.info("把已有窗口拉到前台失败", exc_info=True)
+    return True
+
+
 def send_main_window_behind_sap(main_hwnd: int) -> bool:
     """把 `main_hwnd` 排到 SAP GUI 窗口后面。做到返回 True。
 

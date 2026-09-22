@@ -59,6 +59,9 @@ from config_store import (
     sort_entries,
 )
 from sap_core import SAPError, Settings, LoginTarget, perform_login
+# 窗口标题定义在入口模块（单实例拉回前台时也按这个标题找窗口）。
+# OpenSAPGUI 对 gui_app 是函数内延迟导入，这里反向 import 不会成环。
+from OpenSAPGUI import WINDOW_TITLE
 from sap_landscape import (
     client_candidates,
     connection_names,
@@ -756,7 +759,7 @@ class MainWindow(QWidget):
         self.cards: list[EntryCard] = []
         self.login_thread: Optional[LoginThread] = None
 
-        self.setWindowTitle("SAP 自动登录")
+        self.setWindowTitle(WINDOW_TITLE)
         self.resize(560, 520)
         self.setMinimumSize(460, 360)
 

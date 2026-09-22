@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import logging
 import os
 import shutil
@@ -46,8 +47,79 @@ from sap_core import (
     perform_login,
     resolve_target,
 )
+from win_focus import bring_window_to_front
 
 LOGGER = logging.getLogger("sap")
+
+# 界面主窗口标题（gui_app.MainWindow 也用它），单实例拉回前台时按这个找窗口
+WINDOW_TITLE = "SAP 自动登录"
+
+# 单实例互斥体：`Local\` 限定当前登录会话，多用户同时登录互不影响
+SINGLE_INSTANCE_MUTEX_NAME = r"Local\OpenSAPGUI.SingleInstance"
+ERROR_ALREADY_EXISTS = 183
+
+_instance_lock_handle = None
+
+
+def acquire_single_instance_lock(name: str = SINGLE_INSTANCE_MUTEX_NAME) -> bool:
+    """占住"只开一个界面"的互斥体；已经有实例在跑就返回 False。
+
+    Windows 命名互斥体：句柄由模块级变量持有，进程退出时由内核自动
+    回收、互斥体随之消失，不需要显式释放（release 只给测试用）。
+    创建失败（极罕见的权限问题）按允许启动处理——别让环境异常把程序
+    变成打不开。
+    """
+    global _instance_lock_handle
+    if sys.platform != "win32":
+        return True                      # 非 Windows（开发/测试）不限制
+    if _instance_lock_handle is not None:
+        return True                      # 本进程已经持有
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = kernel32.CreateMutexW(None, False, name)
+    except Exception:  # noqa: BLE001
+        LOGGER.warning("创建单实例互斥体失败，按允许启动处理", exc_info=True)
+        return True
+    if not handle:
+        LOGGER.warning(
+            "创建单实例互斥体失败（错误码 %s），按允许启动处理",
+            ctypes.get_last_error(),
+        )
+        return True
+    if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+        kernel32.CloseHandle(handle)     # 已经有实例在跑了
+        return False
+    _instance_lock_handle = handle
+    return True
+
+
+def release_single_instance_lock() -> None:
+    """释放互斥体。进程退出时内核本来就会回收，这个主要给测试用。"""
+    global _instance_lock_handle
+    if _instance_lock_handle and sys.platform == "win32":
+        try:
+            ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle(
+                _instance_lock_handle
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    _instance_lock_handle = None
+
+
+def _warn_already_running() -> None:
+    """兜底提示：检测到已有实例，但没找到它的窗口（极端时序）才走到这里。"""
+    if sys.platform != "win32":
+        return
+    try:
+        # windowed exe 没有控制台，用原生 MessageBox（此时 Qt 未加载）
+        ctypes.windll.user32.MessageBoxW(
+            None,
+            "SAP 自动登录已经在运行了。",
+            WINDOW_TITLE,
+            0x40,        # MB_ICONINFORMATION
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -288,6 +360,12 @@ def run_gui_entry(raw_args: list[str]) -> int:
     configure_logging(known.verbose)
     _hide_own_console()
     _install_excepthook()
+
+    # 单实例：已经在跑就不再开第二个界面，把已有的那个带回来
+    if not acquire_single_instance_lock():
+        if not bring_window_to_front(WINDOW_TITLE):
+            _warn_already_running()
+        return 0
 
     if known.config:
         os.environ["SAP_CONFIG_FILE"] = known.config

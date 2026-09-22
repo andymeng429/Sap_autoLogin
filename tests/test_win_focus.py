@@ -13,6 +13,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import win_focus
 from win_focus import (
     SAP_WINDOW_CLASSES,
+    bring_window_to_front,
     find_sap_window,
     is_sap_window_class,
     send_main_window_behind_sap,
@@ -24,16 +25,54 @@ logging.getLogger("sap.winfocus").propagate = False
 
 
 class FakeGui:
-    """假的 win32gui，只记下 SetWindowPos 的调用，不做真事。"""
+    """假的 win32gui：记下 SetWindowPos 等调用，用注册表模拟窗口清单。"""
 
-    def __init__(self, explode=False):
+    def __init__(self, explode=False, windows=None, foreground=0,
+                 minimized=None, lock_foreground=False):
         self.calls = []
         self.explode = explode
+        self.windows = dict(windows or {})   # hwnd -> title
+        self.minimized = set(minimized or ())
+        self.foreground = foreground
+        self.lock_foreground = lock_foreground   # 模拟 Windows 前台锁定
+
+    def EnumWindows(self, callback, _param):
+        if self.explode:
+            raise OSError("枚举失败")
+        for hwnd, title in list(self.windows.items()):
+            callback(hwnd, None)
+
+    def IsWindowVisible(self, hwnd):
+        return hwnd in self.windows
+
+    def GetWindowText(self, hwnd):
+        return self.windows.get(hwnd, "")
+
+    def IsIconic(self, hwnd):
+        return hwnd in self.minimized
+
+    def ShowWindow(self, hwnd, cmd):
+        self.calls.append(("ShowWindow", hwnd, cmd))
+        self.minimized.discard(hwnd)
+
+    def SetForegroundWindow(self, hwnd):
+        self.calls.append(("SetForegroundWindow", hwnd))
+        if not self.lock_foreground:
+            self.foreground = hwnd
+
+    def GetForegroundWindow(self):
+        return self.foreground
+
+    def BringWindowToTop(self, hwnd):
+        self.calls.append(("BringWindowToTop", hwnd))
+
+    def FlashWindow(self, hwnd, flash):
+        self.calls.append(("FlashWindow", hwnd, flash))
 
     def SetWindowPos(self, *args):
         if self.explode:
             raise OSError("句柄已失效")
-        self.calls.append(args)
+        self.calls.append(("SetWindowPos",) + args)
         return True
 
 
@@ -41,6 +80,8 @@ class FakeCon:
     SWP_NOMOVE = 0x0002
     SWP_NOSIZE = 0x0001
     SWP_NOACTIVATE = 0x0010
+    SW_RESTORE = 9
+    SW_SHOW = 5
 
 
 def patch_win32(gui, con=None):
@@ -115,7 +156,9 @@ def test_behind_puts_main_window_after_sap():
         restore_find()
         restore_win32()
 
-    (main, insert_after, x, y, width, height, flags), = gui.calls
+    (call,) = gui.calls
+    assert call[0] == "SetWindowPos"
+    _, main, insert_after, x, y, width, height, flags = call
     assert main == 111
     assert insert_after == 999, "参考窗口必须是 SAP 那个"
     assert (x, y, width, height) == (0, 0, 0, 0)
@@ -152,6 +195,72 @@ def test_behind_is_noop_without_win32gui():
         assert send_main_window_behind_sap(111) is False, "没有 win32gui 就安静地不做"
     finally:
         restore_find()
+        restore()
+
+
+# --------------------------------------------------------------------------- #
+# 单实例：把已有窗口拉回前台
+# --------------------------------------------------------------------------- #
+def test_bring_to_front_restores_minimized_window():
+    gui = FakeGui(windows={111: "SAP 自动登录"}, minimized={111}, foreground=0)
+    restore = patch_win32(gui)
+    try:
+        assert bring_window_to_front("SAP 自动登录") is True
+    finally:
+        restore()
+
+    kinds = [c[0] for c in gui.calls]
+    assert "ShowWindow" in kinds and ("SetForegroundWindow", 111) in gui.calls
+    restore_cmd = [c for c in gui.calls if c[0] == "ShowWindow"][0]
+    assert restore_cmd[2] == FakeCon.SW_RESTORE, "最小化的窗口要先还原"
+
+
+def test_bring_to_front_ignores_other_titles():
+    gui = FakeGui(windows={111: "记事本"})
+    restore = patch_win32(gui)
+    try:
+        assert bring_window_to_front("SAP 自动登录") is False
+        assert gui.calls == [], "没找到目标窗口就不许乱动别的窗口"
+    finally:
+        restore()
+
+
+def test_bring_to_front_flash_when_foreground_locked():
+    """抢不到前台（Windows 前台锁定）就闪任务栏提示，不算失败。"""
+    gui = FakeGui(windows={111: "SAP 自动登录"}, foreground=999,
+                  lock_foreground=True)
+    restore = patch_win32(gui)
+    try:
+        assert bring_window_to_front("SAP 自动登录") is True
+    finally:
+        restore()
+
+    assert ("FlashWindow", 111, True) in gui.calls, "抢不到前台要闪任务栏"
+
+
+def test_bring_to_front_survives_enum_failure():
+    gui = FakeGui(explode=True)
+    restore = patch_win32(gui)
+    try:
+        assert bring_window_to_front("SAP 自动登录") is False
+    finally:
+        restore()
+
+
+def test_bring_to_front_is_noop_without_win32gui():
+    restore = patch_win32(None, None)
+    try:
+        assert bring_window_to_front("SAP 自动登录") is False
+    finally:
+        restore()
+
+
+def test_bring_to_front_requires_a_title():
+    restore = patch_win32(FakeGui(windows={1: "SAP 自动登录"}))
+    try:
+        assert bring_window_to_front("") is False
+        assert bring_window_to_front(None) is False
+    finally:
         restore()
 
 
