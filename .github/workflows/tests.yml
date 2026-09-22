@@ -1,0 +1,42 @@
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: 跑全部测试（148 项，全 mock）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 跑测试
+        env:
+          PYTHONIOENCODING: utf-8
+          # 界面测试不弹窗：offscreen 平台下没有中文字体，但断言照常生效
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $failed = $false
+          foreach ($f in Get-ChildItem tests\test_*.py | Sort-Object Name) {
+            Write-Host "--- $f ---"
+            python $f
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          }
+          if ($failed) {
+            Write-Host "::error::有测试未通过"
+            exit 1
+          }
+          Write-Host "全部测试通过"

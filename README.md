@@ -221,6 +221,7 @@ OpenSAPGUI.exe --list               :: 列出已配置的连接后退出
 | `SAPScriptingTracker.py` | 独立小工具：探测当前 SAP GUI 会话的 Scripting 是否可用、会话是否 Busy |
 | `OpenSAPGUI.spec` | PyInstaller 打包配置（onedir）|
 | `run_tests.bat` | 一键跑全部测试 |
+| `.github/workflows/tests.yml` | CI：push / PR 时自动跑全部测试 |
 
 ### 登录流程做了什么
 
@@ -284,7 +285,8 @@ DPAPI 密文绑定原电脑的 Windows 账号，换机解不开——这是设�
 
 - 仓库里**不包含**任何真实凭据：`config.json`（连接名 / 用户名 / 加密密码）与 `*.log` 均已在 `.gitignore` 中排除；
 - 密码仅以 DPAPI 密文形式落在本机 `config.json`，内存中的明文不写日志（`LoginTarget.__repr__` 会把密码显示为 `***`）；
-- 用 `--password` 传密码会暴露在命令行里（同机其它进程可见），仅在临时排障时使用。
+- 用 `--password` 传密码会暴露在命令行里（同机其它进程可见），仅在临时排障时使用；
+- 发现安全问题请按 [SECURITY.md](SECURITY.md) 的方式**私密报告**，不要开公开 Issue。
 
 ---
 
@@ -292,7 +294,7 @@ DPAPI 密文绑定原电脑的 Windows 账号，换机解不开——这是设�
 
 Issue 和 PR 都欢迎。提交前请确认：
 
-- 跑一遍 `run_tests.bat`，全部用例必须通过；
+- 跑一遍 `run_tests.bat`，全部用例必须通过（推上来之后 GitHub Actions 也会自动跑一遍，见 `.github/workflows/tests.yml`）；
 - 新增登录相关逻辑时，同步在 `tests\` 里补 mock 用例，覆盖「成功 / 报错弹窗 / 控件缺失」三类分支；
 - **提交里不要出现任何真实凭据、连接名、client 号或公司系统信息**，示例一律用 `PRD-1D` / `100` 这类占位符；
 - 界面改动请顺手检查卡片布局仍然只有两行。
