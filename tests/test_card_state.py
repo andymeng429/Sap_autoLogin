@@ -164,6 +164,46 @@ def test_finish_hides_warning_row_on_failure():
         teardown(window, folder)
 
 
+class _FakeThread:
+    """假线程：只要能被赋值、能被 deleteLater 就够了。"""
+
+    def __init__(self):
+        self.deleted = False
+
+    def deleteLater(self):
+        self.deleted = True
+
+
+def test_login_thread_reference_survives_the_result_slot():
+    """结果槽里绝不能提前丢掉线程引用。
+
+    QThread 在运行中被析构时，Qt 会直接 qFatal 然后 abort()——WER 里就表现成
+    Qt6Core.dll / c0000409 的"已停止工作"。而 _on_login_finished 是由
+    finished_with 触发的，那一刻 run() 可能还没返回，所以引用必须留到
+    finished 信号（_on_login_thread_finished）再放。
+    """
+    window, folder = make_window()
+    fake = _FakeThread()
+    window.login_thread = fake
+
+    original = gui_app.QMessageBox
+    gui_app.QMessageBox = _silent_message_box
+    try:
+        window._on_login_finished(False, "登录失败", "密码错误")
+    finally:
+        gui_app.QMessageBox = original
+
+    try:
+        assert window.login_thread is fake, "结果槽不该动 login_thread"
+        assert fake.deleted is False, "线程还没结束，不能交给 Qt 删"
+
+        window._on_login_thread_finished()
+        assert window.login_thread is None, "线程结束后才释放引用"
+        assert fake.deleted is True, "释放时顺手 deleteLater"
+    finally:
+        teardown(window, folder)
+
+
 class _silent_message_box:
     """顶掉 QMessageBox，只记录调用，exec() 直接返回。"""
 

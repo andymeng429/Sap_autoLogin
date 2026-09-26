@@ -1006,9 +1006,24 @@ class MainWindow(QWidget):
         thread = LoginThread(self._settings(), target, tcode=None)
         thread.progressed.connect(self._on_progress)
         thread.finished_with.connect(self._on_login_finished)
-        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._on_login_thread_finished)
         self.login_thread = thread
         thread.start()
+
+    def _on_login_thread_finished(self) -> None:
+        """等线程**真正结束**后再放手，而不是在结果槽里立刻丢引用。
+
+        结果槽由 ``finished_with`` 触发，那一刻 ``run()`` 可能还没返回。
+        Python 侧一旦释放最后一个引用，PySide6 就会析构"仍在运行"的
+        QThread，Qt 紧接着
+        qFatal("QThread: Destroyed while thread is still running") 并 abort()——
+        进程会毫无征兆地"已停止工作"（WER 里指向 Qt6Core.dll / c0000409）。
+        ``finished`` 是 run() 返回后才发出的，在这里清理才是安全的。
+        """
+        thread = self.login_thread
+        self.login_thread = None
+        if thread is not None:
+            thread.deleteLater()
 
     def _set_login_state(self, busy: bool) -> None:
         self.add_button.setEnabled(not busy)
@@ -1021,7 +1036,9 @@ class MainWindow(QWidget):
         self.status_label.setText(message)
 
     def _on_login_finished(self, success: bool, title: str, detail: str) -> None:
-        self.login_thread = None
+        # 线程引用交给 _on_login_thread_finished 释放，这里绝不能动：
+        # 本槽由 finished_with 触发时 run() 可能还没返回，提前丢引用会把
+        # "仍在运行"的 QThread 析构掉，Qt 直接 abort()。
         # 卡片自始至终保持两行：恢复按钮即可，布局从不因登录而变
         self._set_login_state(False)
 
