@@ -184,6 +184,73 @@ def _install_excepthook() -> None:
     sys.excepthook = handler
 
 
+def _install_thread_excepthook() -> None:
+    """工作线程里漏出来的异常也要落进日志——登录就跑在后台线程里。"""
+    def handler(args) -> None:
+        LOGGER.critical(
+            "后台线程 %s 里未捕获的异常",
+            getattr(args.thread, "name", "?"),
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
+
+    threading.excepthook = handler
+
+
+def _install_qt_message_logging() -> None:
+    """把 Qt 自己的日志接进我们的日志文件。
+
+    Qt 遇到**致命错误**时的处理顺序是：先回调消息处理器、紧接着调用 abort()。
+    进程直接消失（WER 只显示"已停止工作"），Python 层连 traceback 都拿不到，
+    所以 qFatal 的那行文字往往就是唯一线索，必须留下来。
+    """
+    try:
+        from PySide6.QtCore import QtMsgType, qInstallMessageHandler
+    except Exception:  # noqa: BLE001 - Qt 起不来时界面本来也开不了
+        return
+
+    levels = {
+        QtMsgType.QtDebugMsg: logging.DEBUG,
+        QtMsgType.QtInfoMsg: logging.INFO,
+        QtMsgType.QtWarningMsg: logging.WARNING,
+        QtMsgType.QtCriticalMsg: logging.ERROR,
+        QtMsgType.QtFatalMsg: logging.CRITICAL,
+    }
+
+    def handler(mode, _context, message) -> None:
+        LOGGER.log(levels.get(mode, logging.INFO), "[Qt] %s", message)
+        if mode == QtMsgType.QtFatalMsg:
+            # 下一句就是 abort()，先把日志刷盘，不然什么都留不下
+            for each in logging.getLogger().handlers:
+                try:
+                    each.flush()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    qInstallMessageHandler(handler)
+
+
+# faulthandler 要求文件对象一直活着，所以挂在模块级
+_crash_stream = None
+
+
+def _enable_crash_logging(log_path: Optional[Path]) -> None:
+    """把原生崩溃（访问违规、栈溢出等）时的 Python 调用栈写到日志旁边的 .crash 文件。
+
+    注意 Qt 的 `abort()` 走 fast-fail，faulthandler 抓不到；但访问违规这类
+    能抓到，有总比什么都没有强。
+    """
+    global _crash_stream
+    if log_path is None:
+        return
+    try:
+        import faulthandler
+
+        _crash_stream = open(str(log_path) + ".crash", "a", encoding="utf-8")
+        faulthandler.enable(file=_crash_stream, all_threads=True)
+    except Exception:  # noqa: BLE001 - 诊断功能，失败不影响主流程
+        _crash_stream = None
+
+
 # --------------------------------------------------------------------------- #
 # 命令行
 # --------------------------------------------------------------------------- #
@@ -375,7 +442,13 @@ def run_gui_entry(raw_args: list[str]) -> int:
     except ConfigError as exc:
         LOGGER.error("配置读取失败: %s", exc)
         log_file = None
-    attach_log_file(log_file)
+    resolved_log = attach_log_file(log_file)
+
+    # 崩溃现场的三层保险：后台线程异常、Qt 致命日志、原生崩溃调用栈。
+    # 界面崩成"已停止工作"时，这三样是仅有的线索来源。
+    _install_thread_excepthook()
+    _install_qt_message_logging()
+    _enable_crash_logging(resolved_log)
 
     import gui_app  # 延迟导入：命令行模式不必加载 Qt
 

@@ -37,6 +37,10 @@ DEFAULT_STARTUP_TIMEOUT = 30
 DEFAULT_CONNECT_TIMEOUT = 30
 DEFAULT_POPUP_TIMEOUT = 8
 
+# 配置里写的日志路径不可写时（典型情况：config.json 从别的电脑拷来，
+# 里面的 log_file 还是那台机器上的绝对路径），退回到程序目录的同名文件。
+DEFAULT_LOG_NAME = "OpenSAPGUI.log"
+
 # 等待会话空闲（Busy 落到 False）的时限，以及登录后判断结果的总时限
 IDLE_TIMEOUT = 15
 LOGIN_VERIFY_TIMEOUT = 12
@@ -977,29 +981,46 @@ def configure_logging(verbose: bool = False, stream=None) -> None:
     )
 
 
+def _attach_file_handler(path: Path) -> bool:
+    """尝试把文件 handler 挂到根 logger 上，成功返回 True。"""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(path, encoding="utf-8")
+    except OSError as exc:  # 路径不可写时只警告，不影响主流程
+        LOGGER.warning("无法写入日志文件 %s: %s", path, exc)
+        return False
+    file_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    logging.getLogger().addHandler(file_handler)
+    return True
+
+
 def attach_log_file(log_file: Optional[str]) -> Optional[Path]:
     """额外挂一个文件 handler，支持 %TEMP% 等环境变量。
 
     相对路径（如 OpenSAPGUI.log）会解析到程序所在目录，而非当前工作目录，
     这样无论在哪里启动，日志都落在程序旁边。
+
+    配置里的路径**写死成别的机器上的绝对路径**时（config.json 从别人那儿
+    拷来，里面还留着 `D:\\...\\OpenSAPGUI.log`），这里退回到程序目录。
+    程序崩溃时日志是唯一的线索，丢了等于没法查。
     """
     if not log_file:
         return None
     path = Path(os.path.expandvars(log_file)).expanduser()
     if not path.is_absolute():
         path = application_dir() / path
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(path, encoding="utf-8")
-        file_handler.setFormatter(
-            logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        )
-        logging.getLogger().addHandler(file_handler)
+
+    if _attach_file_handler(path):
         LOGGER.debug("日志文件: %s", path)
         return path
-    except OSError as exc:  # 路径不可写时只警告，不影响主流程
-        LOGGER.warning("无法写入日志文件 %s: %s", path, exc)
-        return None
+
+    fallback = application_dir() / DEFAULT_LOG_NAME
+    if fallback != path and _attach_file_handler(fallback):
+        LOGGER.warning("配置里的日志路径 %s 不可用，已改用 %s", path, fallback)
+        return fallback
+    return None
