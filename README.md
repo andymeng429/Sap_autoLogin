@@ -1,17 +1,17 @@
 # OpenSAPGUI · SAP GUI 自动登录
 
-**⬇️ 下载最新版（免安装）：[GitHub Releases](https://github.com/andymeng429/Sap_autoLogin/releases/latest) ｜ [Gitee Releases](https://gitee.com/andy_meng/Sap_autoLogin/releases/latest)** —— 解压即用，不需要 Python。
+**⬇️ 下载最新版（免安装）：[Gitee Releases](https://gitee.com/andy_meng/Sap_autoLogin/releases/latest)（国内直连）｜ [GitHub Releases](https://github.com/andymeng429/Sap_autoLogin/releases/latest)** —— 解压即用，不需要 Python。
 前提：本机装有 SAP GUI for Windows，且账号具备 `SAP GUI Scripting` 权限（服务端管控，详见[环境要求](#环境要求)）。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey.svg)](#环境要求)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](requirements.txt)
-[![tests](https://github.com/andymeng429/Sap_autoLogin/actions/workflows/tests.yml/badge.svg)](https://github.com/andymeng429/Sap_autoLogin/actions/workflows/tests.yml)
+[![tests](https://img.shields.io/github/actions/workflow/status/andymeng429/Sap_autoLogin/tests.yml?branch=master&label=tests&logo=github)](https://github.com/andymeng429/Sap_autoLogin/actions/workflows/tests.yml)
 
 一键登录 SAP，可选直接进入指定事务码。图形界面里单击卡片即可登录，也支持命令行调用（给快捷方式 / 计划任务用）。
 连接配置全部保存在本地，**密码用 Windows DPAPI 加密，仓库里没有任何明文凭据**。
 
-> **本仓库双平台同步发布**：[GitHub · andymeng429/Sap_autoLogin](https://github.com/andymeng429/Sap_autoLogin) 与 [Gitee · andy_meng/Sap_autoLogin](https://gitee.com/andy_meng/Sap_autoLogin) 的代码、Release、README 完全一致，国内访问慢就走 Gitee。下文凡是外部链接都同时给了两个平台的地址，按你打得开的那个点。
+> **双平台同步发布，国内请优先用 Gitee**：[Gitee · andy_meng/Sap_autoLogin](https://gitee.com/andy_meng/Sap_autoLogin) 与 [GitHub · andymeng429/Sap_autoLogin](https://github.com/andymeng429/Sap_autoLogin) 的代码、tag、Release、README 完全一致（同一份提交一次推两边）。`github.com` 网页在国内不少网络打不开，但两边的包是同一个，没必要翻墙去 GitHub。下文凡是外部链接都给了两个平台的地址，**国内网络优先点 Gitee 那条**。
 
 ![主界面：连接卡片列表，单击即登录](docs/images/main-window.png)
 
@@ -61,7 +61,7 @@ pyinstaller>=6.0          # 打包 exe 时使用
 
 ### 方式一：直接用打包好的程序（推荐）
 
-1. 到 [GitHub Releases](https://github.com/andymeng429/Sap_autoLogin/releases/latest) 或 [Gitee Releases](https://gitee.com/andy_meng/Sap_autoLogin/releases/latest) 下载最新压缩包（两边是同一个包，挑打得开的那个），解压整个 `OpenSAPGUI` 文件夹（**不要只把 exe 单独拷出来**，它需要同级的 `_internal\` 目录）；
+1. 到 [Gitee Releases](https://gitee.com/andy_meng/Sap_autoLogin/releases/latest)（国内直连）或 [GitHub Releases](https://github.com/andymeng429/Sap_autoLogin/releases/latest) 下载最新压缩包（两边是同一个包），解压整个 `OpenSAPGUI` 文件夹（**不要只把 exe 单独拷出来**，它需要同级的 `_internal\` 目录）；
 2. 双击 `OpenSAPGUI.exe`；
 3. 界面右上角「＋ 新建连接」，填连接名、client、用户名、密码（连接名和 client 有下拉可选）；
 4. 之后**单击卡片**就能直接登录。
@@ -71,9 +71,9 @@ pyinstaller>=6.0          # 打包 exe 时使用
 ### 方式二：从源码运行
 
 ```bat
-:: 两个地址二选一，国内建议用下面注释里的 Gitee
-git clone https://github.com/andymeng429/Sap_autoLogin.git
-:: git clone https://gitee.com/andy_meng/Sap_autoLogin.git
+:: 两个地址二选一，国内请用 Gitee（github.com 常常连不上）
+git clone https://gitee.com/andy_meng/Sap_autoLogin.git
+:: git clone https://github.com/andymeng429/Sap_autoLogin.git
 
 cd Sap_autoLogin
 python -m venv .venv
