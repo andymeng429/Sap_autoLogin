@@ -11,7 +11,7 @@
 一键登录 SAP，可选直接进入指定事务码。图形界面里单击卡片即可登录，也支持命令行调用（给快捷方式 / 计划任务用）。
 连接配置全部保存在本地，**密码用 Windows DPAPI 加密，仓库里没有任何明文凭据**。
 
-> **双平台同步发布，国内请优先用 Gitee**：[Gitee · andy_meng/Sap_autoLogin](https://gitee.com/andy_meng/Sap_autoLogin) 与 [GitHub · andymeng429/Sap_autoLogin](https://github.com/andymeng429/Sap_autoLogin) 的代码、tag、Release、README 完全一致（同一份提交一次推两边）。`github.com` 网页在国内不少网络打不开，但两边的包是同一个，没必要翻墙去 GitHub。下文凡是外部链接都给了两个平台的地址，**国内网络优先点 Gitee 那条**。
+> **双平台同步发布，国内请优先用 Gitee**：[Gitee · andy_meng/Sap_autoLogin](https://gitee.com/andy_meng/Sap_autoLogin) 与 [GitHub · andymeng429/Sap_autoLogin](https://github.com/andymeng429/Sap_autoLogin) 的代码、tag、README 完全一致（同一份提交一次推两边），Release 附件也在两边都传了。`github.com` 网页在国内不少网络打不开，但两边的包是同一个，没必要翻墙去 GitHub。下文凡是外部链接都给了两个平台的地址，**国内网络优先点 Gitee 那条**。
 
 ![主界面：连接卡片列表，单击即登录](docs/images/main-window.png)
 
